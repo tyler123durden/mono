@@ -118,6 +118,7 @@ namespace System.Windows.Forms.RTF {
 					new KeyStruct(Major.CharAttr, Minor.Invisible, "v"),
 					new KeyStruct(Major.CharAttr, Minor.ForeColor, "cf"),
 					new KeyStruct(Major.CharAttr, Minor.BackColor, "cb"),
+				    new KeyStruct(Major.CharAttr, Minor.BackColor, "highlight"),
 					new KeyStruct(Major.CharAttr, Minor.RTLChar, "rtlch"),
 					new KeyStruct(Major.CharAttr, Minor.LTRChar, "ltrch"),
 					new KeyStruct(Major.CharAttr, Minor.CharStyleNum, "cs"),

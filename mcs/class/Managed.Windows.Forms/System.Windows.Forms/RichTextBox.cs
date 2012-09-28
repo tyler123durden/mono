@@ -64,7 +64,6 @@ namespace System.Windows.Forms {
 		private bool		enable_auto_drag_drop;
 		private RichTextBoxLanguageOptions language_option;
 		private bool		rich_text_shortcuts_enabled;
-		private Color		selection_back_color;
 		#endregion	// Local Variables
 
 		#region Public Constructors
@@ -93,7 +92,6 @@ namespace System.Windows.Forms {
 			backcolor_set = false;
 			language_option = RichTextBoxLanguageOptions.AutoFontSizeAdjust;
 			rich_text_shortcuts_enabled = true;
-			selection_back_color = DefaultBackColor;
 			ForeColor = ThemeEngine.Current.ColorWindowText;
 
 			base.HScrolled += new EventHandler(RichTextBox_HScrolled);
@@ -473,12 +471,58 @@ namespace System.Windows.Forms {
 			}
 		}
 
-		[MonoTODO ("Stub, does nothing")]
 		[Browsable (false)]
 		[DesignerSerializationVisibility (DesignerSerializationVisibility.Hidden)]
 		public Color SelectionBackColor {
-			get { return selection_back_color; }
-			set { selection_back_color = value; }
+			get { 					
+				Color	color;
+				LineTag	start;
+				LineTag	end;
+				LineTag	tag;
+
+				if (selection_length > 0) {
+					start = document.selection_start.line.FindTag (document.selection_start.pos + 1);
+					end = document.selection_start.line.FindTag (document.selection_end.pos);
+				} else {
+					start = document.selection_start.line.FindTag (document.selection_start.pos);
+					end = start;
+				}
+
+				color = start.BackColor;
+
+				tag = start;
+				while (tag != null) {
+
+					if (!color.Equals (tag.BackColor))
+						return Color.Empty;
+
+					if (tag == end)
+						break;
+
+					tag = document.NextTag (tag);
+				}
+
+				return color;
+			}
+			set {
+				if (value == Color.Empty)
+					value = Color.Transparent;
+					
+				int sel_start;
+				int sel_end;
+
+				sel_start = document.LineTagToCharIndex(document.selection_start.line, document.selection_start.pos);
+				sel_end = document.LineTagToCharIndex(document.selection_end.line, document.selection_end.pos);
+
+				document.FormatText (document.selection_start.line, document.selection_start.pos + 1,
+						document.selection_end.line, document.selection_end.pos + 1, null,
+						Color.Empty, value, FormatSpecified.BackColor);
+
+				document.CharIndexToLineTag(sel_start, out document.selection_start.line, out document.selection_start.tag, out document.selection_start.pos);
+				document.CharIndexToLineTag(sel_end, out document.selection_end.line, out document.selection_end.tag, out document.selection_end.pos);
+
+				document.UpdateView(document.selection_start.line, 0);		
+			}
 		}
 
 		[Browsable(false)]
@@ -1307,6 +1351,7 @@ namespace System.Windows.Forms {
 		}
 
 		private class RtfSectionStyle : ICloneable {
+			internal Color rtf_backcolor;
 			internal Color rtf_color;
 			internal RTF.Font rtf_rtffont;
 			internal int rtf_rtffont_size;
@@ -1319,7 +1364,8 @@ namespace System.Windows.Forms {
 			public object Clone ()
 			{
 				RtfSectionStyle new_style = new RtfSectionStyle ();
-
+				
+				new_style.rtf_backcolor = rtf_backcolor;
 				new_style.rtf_color = rtf_color;
 				new_style.rtf_par_line_left_indent = rtf_par_line_left_indent;
 				new_style.rtf_rtfalign = rtf_rtfalign;
@@ -1407,6 +1453,23 @@ namespace System.Windows.Forms {
 									this.rtf_style.rtf_color = ForeColor;
 								} else {
 									this.rtf_style.rtf_color = Color.FromArgb(color.Red, color.Green, color.Blue);
+								}
+								FlushText (rtf, false);
+							}
+							break;
+						}
+					
+					    case RTF.Minor.BackColor: {
+							System.Windows.Forms.RTF.Color	color;
+										
+							color = System.Windows.Forms.RTF.Color.GetColor(rtf, rtf.Param);							
+					
+							if (color != null) {
+								FlushText(rtf, false);
+								if (color.Red == -1 && color.Green == -1 && color.Blue == -1) {
+									this.rtf_style.rtf_backcolor = BackColor;
+								} else {
+									this.rtf_style.rtf_backcolor = Color.FromArgb(color.Red, color.Green, color.Blue);
 								}
 								FlushText (rtf, false);
 							}
@@ -1523,7 +1586,7 @@ namespace System.Windows.Forms {
 				case RTF.Minor.QuadRight:
 					FlushText (rtf, false);
 					rtf_style.rtf_rtfalign = HorizontalAlignment.Right;
-					break;
+					break;					
 				}
 				break;
 			}
@@ -1575,8 +1638,8 @@ namespace System.Windows.Forms {
 					break;
 				}
 
-			case RTF.Minor.WidowCtrl:
-				break;
+				case RTF.Minor.WidowCtrl:
+					break;
 
 				case RTF.Minor.EmDash: {
 				rtf_line.Append ("\u2014");
@@ -1688,6 +1751,10 @@ namespace System.Windows.Forms {
 					Line line = document.GetLine (rtf_cursor_y);
 					line.indent = rtf_style.rtf_par_line_left_indent;
 				}
+				
+				Line line2 = document.GetLine (rtf_cursor_y);
+				document.FormatText (line2, 1, line2, rtf_line.Length+1, null, Color.Empty, rtf_style.rtf_backcolor, FormatSpecified.BackColor);			
+				
 			} else {
 				Line line;
 
@@ -1696,8 +1763,9 @@ namespace System.Windows.Forms {
 				if (rtf_line.Length > 0) {
 					document.InsertString (line, rtf_cursor_x, rtf_line.ToString ());
 					document.FormatText (line, rtf_cursor_x + 1, line, rtf_cursor_x + 1 + length,
-			    font, rtf_style.rtf_color, Color.Empty,
-							FormatSpecified.Font | FormatSpecified.Color);
+			    font, rtf_style.rtf_color, rtf_style.rtf_backcolor,
+							FormatSpecified.Font | FormatSpecified.Color | FormatSpecified.BackColor);
+							
 				}
 				if (newline) {
 					line = document.GetLine (rtf_cursor_y);
@@ -1740,6 +1808,7 @@ namespace System.Windows.Forms {
 			rtf_skip_count = 0;
 			rtf_line = new StringBuilder();
 			rtf_style.rtf_color = Color.Empty;
+			rtf_style.rtf_backcolor = Color.Empty;
 			rtf_style.rtf_rtffont_size = (int)this.Font.Size;
 			rtf_style.rtf_rtfalign = HorizontalAlignment.Left;
 			rtf_style.rtf_rtfstyle = FontStyle.Regular;
